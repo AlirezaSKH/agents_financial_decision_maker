@@ -1,3 +1,7 @@
 crewai
 langchain
+langchain_community
 openai
+yfinance
+google-search-results
+python-dotenv
