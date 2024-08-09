@@ -293,6 +293,33 @@ def get_enhanced_technical_analysis(data):
     
     # Volume Profile
     indicators['Volume_Profile'] = calculate_volume_profile(data)
+
+
+
+    # Ichimoku Cloud
+    ichimoku = data.ta.ichimoku()
+    indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
+    indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
+    indicators['Ichimoku_Leading_Span_A'] = ichimoku['ISA_9'].shift(26)
+    indicators['Ichimoku_Leading_Span_B'] = ichimoku['ISB_26'].shift(26)
+    
+    # Fibonacci Retracement
+    high = data['High'].max()
+    low = data['Low'].min()
+    diff = high - low
+    indicators['Fib_23.6'] = high - (diff * 0.236)
+    indicators['Fib_38.2'] = high - (diff * 0.382)
+    indicators['Fib_50.0'] = high - (diff * 0.5)
+    indicators['Fib_61.8'] = high - (diff * 0.618)
+    
+    # Pivot Points
+    indicators['Pivot_Point'] = (data['High'].iloc[-1] + data['Low'].iloc[-1] + data['Close'].iloc[-1]) / 3
+    indicators['R1'] = 2 * indicators['Pivot_Point'] - data['Low'].iloc[-1]
+    indicators['S1'] = 2 * indicators['Pivot_Point'] - data['High'].iloc[-1]
+    
+    # Average True Range (ATR)
+    indicators['ATR'] = data.ta.atr()
+
     
     return indicators
 
@@ -369,11 +396,15 @@ def run_analysis(asset):
        - Commodity Channel Index (CCI)
        - On-Balance Volume (OBV)
        - Volume Profile (to identify significant price levels based on trading volume)
+       - Ichimoku Cloud
+       - Fibonacci Retracement levels
+       - Pivot Points
+       - Average True Range (ATR)
     2. Recent news and its potential impact on the asset in different timeframes
     3. Economic indicators: interest rates, unemployment rate, cash rate, PMI, ISM, and NFP
     4. Any other relevant factors that could influence the asset's price
     
-    Pay special attention to the Volume Profile indicator, as it can help identify key support and resistance levels based on historical trading volume. Use this information to reinforce or question other technical indicators and price action analysis.
+    Pay special attention to the Volume Profile indicator and the newly added indicators, as they can help identify key support and resistance levels. Use this information to reinforce or question other technical indicators and price action analysis.
     
     For each timeframe (intraday, short-term, medium-term, and long-term), provide:
     - The overall trend
@@ -381,27 +412,38 @@ def run_analysis(asset):
     - Potential pivot points or areas of interest
     - Any divergences or conflicting signals between different indicators""",
     agent=analysis_agent,
-    expected_output="A comprehensive analysis of the financial data, including identified trends, key indicators, potential risks, and the impact of fundamental factors across multiple timeframes. Provide insights based on the enhanced technical indicators, with a focus on how the Volume Profile supports or conflicts with other indicators and price action. Clearly differentiate between intraday, short-term, medium-term, and long-term outlooks."
+    expected_output="A comprehensive analysis of the financial data, including identified trends, key indicators, potential risks, and the impact of fundamental factors across multiple timeframes. Provide insights based on the enhanced technical indicators, with a focus on how the new indicators (Ichimoku Cloud, Fibonacci Retracement, Pivot Points, ATR) support or conflict with other indicators and price action. Clearly differentiate between intraday, short-term, medium-term, and long-term outlooks."
 )
 
     decision_making_task = Task(
-    description=f"""Based on the analysis provided and the current price of ${current_price:.5f} for {asset}, make an informed investment decision. 
-    Provide a clear recommendation along with the rationale behind it. 
-    Your recommendation should include:
-    1. Whether to buy, sell, or hold the asset
-    2. The specific timeframe for this recommendation (e.g., intraday, short-term (1-5 days), medium-term (1-4 weeks), or long-term (1-6 months))
-    3. Support and resistance prices for multiple timeframes (e.g., 1 hour, 4 hour, daily)
-    4. A structured plan including:
+    description=f"""Based on the analysis provided and the current price of ${current_price:.5f} for {asset}, make informed investment decisions for three distinct timeframes. 
+    Provide clear recommendations along with the rationale behind each. 
+    Your recommendations should include:
+
+    1. Intraday Plan (for today):
+       - Whether to buy, sell, or hold the asset
        - Entry point price (consider a range if appropriate, based on key support/resistance levels)
-       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades)
+       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
        - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
-    5. Risk management considerations, including position sizing recommendations
-    6. Any relevant conditions that might invalidate this recommendation
-    
-    Important guidelines:
-    - Clearly state the expected duration or timeframe for which this recommendation is valid.
-    - Use technical analysis, including the enhanced indicators provided, to identify key support and resistance levels across multiple timeframes.
-    - Set stop loss at a logical level based on the market structure, not just a fixed percentage.
+       - Risk management considerations, including position sizing recommendations
+
+    2. Short-term Plan (until next week):
+       - Whether to buy, sell, or hold the asset
+       - Entry point price (consider a range if appropriate, based on key support/resistance levels)
+       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
+       - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
+       - Risk management considerations, including position sizing recommendations
+
+    3. Medium-term Plan (until next month):
+       - Whether to buy, sell, or hold the asset
+       - Entry point price (consider a range if appropriate, based on key support/resistance levels)
+       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
+       - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
+       - Risk management considerations, including position sizing recommendations
+
+    For each plan:
+    - Use technical analysis, including the enhanced indicators provided, to identify key support and resistance levels.
+    - Set stop loss at a logical level based on the market structure, not just a fixed percentage also ATR is really important for stoploss.
     - Determine target prices based on significant resistance or support levels, depending on the trade direction.
     - Ensure that the potential reward is greater than the risk. The distance to the target should be larger than the distance to the stop loss.
     - Consider using multiple targets if appropriate, based on different resistance/support levels.
@@ -409,9 +451,12 @@ def run_analysis(asset):
     - Explain the rationale behind each level (entry, stop loss, and targets) in terms of technical analysis and market structure.
     - Incorporate insights from the Volume Profile indicator to validate or adjust your support and resistance levels.
 
-    Remember, while maintaining a favorable risk-reward ratio is important, the specific levels should be based on the asset's price action and key technical levels, not arbitrary percentages.""",
+    Important guidelines:
+    - Clearly state any relevant conditions that might invalidate each recommendation.
+    - Remember, while maintaining a favorable risk-reward ratio is important, the specific levels should be based on the asset's price action and key technical levels, not arbitrary percentages.
+    - Be aware that recommendations may differ between timeframes due to different market dynamics and analysis perspectives.""",
     agent=decision_making_agent,
-    expected_output="A clear investment recommendation with a detailed rationale based on the provided analysis. Include the specific timeframe for the recommendation, a structured plan with entry point, stop loss, and target prices that reflect key support and resistance levels across multiple timeframes. Explain the technical basis for each level and ensure the overall plan adheres to sound risk management principles. Clearly state how long this recommendation is expected to be valid."
+    expected_output="Three clear investment recommendations (intraday, short-term, and medium-term) with detailed rationales based on the provided analysis. Include structured plans with entry points, stop losses, and target prices that reflect key support and resistance levels for each timeframe. Explain the technical basis for each level and ensure the overall plans adhere to sound risk management principles."
 )
 
     # Create Crew
