@@ -167,6 +167,7 @@ def get_yfinance_data(symbol, period="1mo"):
 
 def get_stock_data(symbol, period="1mo"):
     try:
+        
         if '/' in symbol:  # This is a forex pair or commodity
             logger.info(f"Fetching forex/commodity data for: {symbol}")
             finnhub_data = get_finnhub_forex_data(symbol)
@@ -177,6 +178,7 @@ def get_stock_data(symbol, period="1mo"):
                 fallback_symbol = symbol.replace('/', '-')
                 data = get_yfinance_data(fallback_symbol)
                 if data is not None and not data.empty:
+                    logger.error(f"No data available for {symbol}")
                     price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
                     data[price_columns] = data[price_columns].round(5)
                     return data
