@@ -284,6 +284,17 @@ def get_enhanced_technical_analysis(data):
     :return: Dictionary containing calculated technical indicators
     """
     indicators = {}
+
+    if data is None or data.empty:
+        logger.error("Input data is None or empty")
+        return {}
+
+    # Check for required columns
+    required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+    if not all(col in data.columns for col in required_columns):
+        logger.error(f"Input data is missing required columns. Required: {required_columns}, Got: {data.columns.tolist()}")
+        return {}
+
     try:
         # Simple Moving Averages
         indicators['SMA_10'] = data.ta.sma(length=10)
@@ -300,17 +311,16 @@ def get_enhanced_technical_analysis(data):
         
         # Moving Average Convergence Divergence
         try:
-            macd = data.ta.macd()
-            indicators['MACD'] = macd['MACD_12_26_9']
-            indicators['MACD_Signal'] = macd['MACDs_12_26_9']
-            indicators['MACD_Hist'] = macd['MACDh_12_26_9']
-        except KeyError:
-            # Fallback method for MACD calculation
-            exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-            exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-            indicators['MACD'] = exp1 - exp2
+            fast = data['Close'].ewm(span=12, adjust=False).mean()
+            slow = data['Close'].ewm(span=26, adjust=False).mean()
+            indicators['MACD'] = fast - slow
             indicators['MACD_Signal'] = indicators['MACD'].ewm(span=9, adjust=False).mean()
             indicators['MACD_Hist'] = indicators['MACD'] - indicators['MACD_Signal']
+        except Exception as e:
+            logger.error(f"Error calculating MACD: {str(e)}")
+            indicators['MACD'] = pd.Series([np.nan] * len(data))
+            indicators['MACD_Signal'] = pd.Series([np.nan] * len(data))
+            indicators['MACD_Hist'] = pd.Series([np.nan] * len(data))
         
         # Bollinger Bands
         try:
@@ -403,11 +413,17 @@ def get_enhanced_technical_analysis(data):
 def run_analysis(asset):
     try:
         shared_memory = SharedMemory()
+        logger.info(f"Fetching stock data for {asset}")
         current_data = get_stock_data(asset)
         
         if current_data is None or current_data.empty:
+            logger.error(f"No data available for {asset}")
             raise ValueError(f"No data available for {asset}")
         
+
+        logger.info(f"Stock data fetched successfully for {asset}. Shape: {current_data.shape}")
+        logger.debug(f"First few rows of data:\n{current_data.head()}")
+
         current_price = current_data['current_price'].iloc[-1] if 'current_price' in current_data else current_data['Close'].iloc[-1]
         news = get_news(asset)
         economic_indicators = get_economic_indicators()
