@@ -267,16 +267,65 @@ def calculate_volume_profile(data, n_bins=10):
     :param n_bins: Number of bins to divide the price range into
     :return: DataFrame with volume profile data
     """
+    # Ensure required columns are present
+    if 'Close' not in data.columns or 'Volume' not in data.columns:
+        raise ValueError("DataFrame must contain 'Close' and 'Volume' columns")
+
+    # Calculate the price range and bin size
     price_range = data['Close'].max() - data['Close'].min()
+    if price_range == 0:
+        raise ValueError("Price range is zero, cannot create bins")
+
     bin_size = price_range / n_bins
     
+    # Define bins and labels
     bins = [data['Close'].min() + i * bin_size for i in range(n_bins + 1)]
     labels = [f"{bins[i]:.2f}-{bins[i+1]:.2f}" for i in range(n_bins)]
     
+    # Bin the data and calculate volume profile
     data['price_bin'] = pd.cut(data['Close'], bins=bins, labels=labels, include_lowest=True)
     volume_profile = data.groupby('price_bin')['Volume'].sum().sort_values(ascending=False)
     
+    # Log the result for debugging
+    print(f"Volume Profile Calculated:\n{volume_profile.head()}")
+
     return volume_profile
+
+
+def calculate_ichimoku_cloud(data):
+    """
+    Calculate the Ichimoku Cloud indicators.
+    
+    :param data: DataFrame with 'high', 'low', 'close' columns
+    :return: A dictionary with Ichimoku Cloud components
+    """
+    # Ensure required columns are present
+    if not all(col in data.columns for col in ['high', 'low', 'close']):
+        raise ValueError("DataFrame must contain 'high', 'low', and 'close' columns")
+    
+    # Calculate Ichimoku Cloud components
+    conversion_line = (data['high'].rolling(window=9).max() + data['low'].rolling(window=9).min()) / 2
+    base_line = (data['high'].rolling(window=26).max() + data['low'].rolling(window=26).min()) / 2
+    leading_span_a = ((conversion_line + base_line) / 2).shift(26)
+    leading_span_b = ((data['high'].rolling(window=52).max() + data['low'].rolling(window=52).min()) / 2).shift(26)
+    lagging_span = data['close'].shift(-26)
+    
+    # Ensure the components are not empty or all NaN
+    if any(comp.isnull().all() for comp in [conversion_line, base_line, leading_span_a, leading_span_b, lagging_span]):
+        raise ValueError("One or more Ichimoku components could not be calculated")
+
+    # Log the result for debugging
+    print("Ichimoku Cloud components calculated successfully.")
+
+    return {
+        'conversion_line': conversion_line,
+        'base_line': base_line,
+        'leading_span_a': leading_span_a,
+        'leading_span_b': leading_span_b,
+        'lagging_span': lagging_span
+    }
+
+
 
 def get_enhanced_technical_analysis(data):
     """
@@ -299,17 +348,17 @@ def get_enhanced_technical_analysis(data):
 
     try:
         # Simple Moving Averages
-        indicators['SMA_10'] = data.ta.sma(length=10)
-        indicators['SMA_20'] = data.ta.sma(length=20)
-        indicators['SMA_50'] = data.ta.sma(length=50)
+        indicators['SMA_10'] = ta.sma(data['Close'], length=10)
+        indicators['SMA_20'] = ta.sma(data['Close'], length=20)
+        indicators['SMA_50'] = ta.sma(data['Close'], length=50)
         
         # Exponential Moving Averages
-        indicators['EMA_10'] = data.ta.ema(length=10)
-        indicators['EMA_20'] = data.ta.ema(length=20)
-        indicators['EMA_50'] = data.ta.ema(length=50)
+        indicators['EMA_10'] = ta.ema(data['Close'], length=10)
+        indicators['EMA_20'] = ta.ema(data['Close'], length=20)
+        indicators['EMA_50'] = ta.ema(data['Close'], length=50)
         
         # Relative Strength Index
-        indicators['RSI'] = data.ta.rsi()
+        indicators['RSI'] = ta.rsi(data['Close'])
         
         # Moving Average Convergence Divergence
         try:
@@ -326,7 +375,7 @@ def get_enhanced_technical_analysis(data):
         
         # Bollinger Bands
         try:
-            bbands = data.ta.bbands()
+            bbands = ta.bbands(data['Close'])
             indicators['Upper_BB'] = bbands['BBU_20_2.0']
             indicators['Middle_BB'] = bbands['BBM_20_2.0']
             indicators['Lower_BB'] = bbands['BBL_20_2.0']
@@ -342,7 +391,7 @@ def get_enhanced_technical_analysis(data):
         
         # Stochastic Oscillator
         try:
-            stoch = data.ta.stoch()
+            stoch = ta.stoch(data['High'], data['Low'], data['Close'])
             indicators['STOCH_K'] = stoch['STOCHk_14_3_3']
             indicators['STOCH_D'] = stoch['STOCHd_14_3_3']
         except KeyError:
@@ -357,15 +406,16 @@ def get_enhanced_technical_analysis(data):
         
         # Average Directional Index
         try:
-            indicators['ADX'] = data.ta.adx()['ADX_14']
+            adx = ta.adx(data['High'], data['Low'], data['Close'])
+            indicators['ADX'] = adx['ADX_14']
         except KeyError:
             # We'll skip ADX if it's not available, as it's complex to calculate manually
-            indicators['ADX'] = np.nan
+            indicators['ADX'] = pd.Series([np.nan] * len(data))
         
         # Commodity Channel Index
         try:
-            indicators['CCI'] = data.ta.cci()
-        except:
+            indicators['CCI'] = ta.cci(data['High'], data['Low'], data['Close'])
+        except Exception:
             # Fallback method for CCI calculation
             period = 20
             tp = (data['High'] + data['Low'] + data['Close']) / 3
@@ -374,25 +424,23 @@ def get_enhanced_technical_analysis(data):
             indicators['CCI'] = (tp - sma_tp) / (0.015 * mad)
         
         # On-Balance Volume
-        indicators['OBV'] = data.ta.obv()
+        indicators['OBV'] = ta.obv(data['Close'], data['Volume'])
         
-        # Volume Profile
+        # Volume Profile (Correct calculation assuming 'price_bin' is a separate step)
         try:
-            volume_profile = data.groupby('price_bin', observed=True)['Volume'].sum().sort_values(ascending=False)
+            volume_profile = data.groupby('price_bin')['Volume'].sum().sort_values(ascending=False)
             indicators['Volume_Profile'] = volume_profile
         except Exception as e:
             logger.error(f"Error calculating Volume Profile: {str(e)}")
             indicators['Volume_Profile'] = pd.Series([np.nan] * len(data))
-
-
-
+        
         # Ichimoku Cloud
         try:
-            ichimoku = data.ta.ichimoku()
-            indicators['Ichimoku_Conversion_Line'] = ichimoku[0]  # ISA_9
-            indicators['Ichimoku_Base_Line'] = ichimoku[1]  # ISB_26
-            indicators['Ichimoku_Leading_Span_A'] = ichimoku[2]  # ITS_9
-            indicators['Ichimoku_Leading_Span_B'] = ichimoku[3]  # IKS_26
+            ichimoku = ta.ichimoku(data['High'], data['Low'], data['Close'])
+            indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
+            indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
+            indicators['Ichimoku_Leading_Span_A'] = ichimoku['ITS_9']
+            indicators['Ichimoku_Leading_Span_B'] = ichimoku['IKS_26']
         except Exception as e:
             logger.error(f"Error calculating Ichimoku Cloud: {str(e)}")
             indicators['Ichimoku_Conversion_Line'] = pd.Series([np.nan] * len(data))
@@ -415,9 +463,8 @@ def get_enhanced_technical_analysis(data):
         indicators['S1'] = 2 * indicators['Pivot_Point'] - data['High'].iloc[-1]
         
         # Average True Range (ATR)
-        indicators['ATR'] = data.ta.atr()
+        indicators['ATR'] = ta.atr(data['High'], data['Low'], data['Close'])
 
-    
     except Exception as e:
         logger.error(f"Error in get_enhanced_technical_analysis: {str(e)}", exc_info=True)
         return {}  # Return an empty dictionary if there's an error
