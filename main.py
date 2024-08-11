@@ -707,6 +707,32 @@ def get_analysis(asset):
         return jsonify({'error': 'No analysis found for this asset'}), 404
 
 
+@app.route('/api/test/<asset>', methods=['GET'])
+def get_analysis(asset):
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM analysis_results WHERE asset = %s ORDER BY timestamp DESC LIMIT 1", (asset,))
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if result:
+            return jsonify({
+                'id': result[0],
+                'asset': result[1],
+                'timestamp': result[2].isoformat(),
+                'intraday_plan': json.loads(result[3]),
+                'short_term_plan': json.loads(result[4]),
+                'medium_term_plan': json.loads(result[5])
+            }), 200
+        else:
+            return jsonify({'error': 'No analysis found for this asset'}), 404
+    except Exception as e:
+        app.logger.error(f"Error retrieving analysis for {asset}: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @app.route('/api/run-analysis/<asset>', methods=['POST'])
 def run_new_analysis(asset):
     app.logger.info(f"Received request for asset: {asset}")
