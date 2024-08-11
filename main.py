@@ -696,11 +696,13 @@ def get_analysis(asset):
 
 @app.route('/api/run-analysis/<asset>', methods=['POST'])
 def run_new_analysis(asset):
+    app.logger.info(f"Received request for asset: {asset}")
     try:
         result = run_analysis(asset)
+        app.logger.info(f"Analysis completed for asset: {asset}")
         return jsonify({'message': 'Analysis completed', 'result': result}), 200
     except Exception as e:
-        app.logger.error(f"Error in run_analysis: {str(e)}", exc_info=True)
+        app.logger.error(f"Error in run_analysis for asset {asset}: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
