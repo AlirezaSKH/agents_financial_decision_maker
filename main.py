@@ -722,15 +722,16 @@ def get_test_analysis(asset):
                 'id': result[0],
                 'asset': result[1],
                 'timestamp': result[2].isoformat(),
-                'intraday_plan': json.loads(result[3]),
-                'short_term_plan': json.loads(result[4]),
-                'medium_term_plan': json.loads(result[5])
+                'intraday_plan': json.loads(result[3]) if isinstance(result[3], str) else result[3],
+                'short_term_plan': json.loads(result[4]) if isinstance(result[4], str) else result[4],
+                'medium_term_plan': json.loads(result[5]) if isinstance(result[5], str) else result[5]
             }), 200
         else:
             return jsonify({'error': 'No analysis found for this asset'}), 404
     except Exception as e:
         app.logger.error(f"Error retrieving analysis for {asset}: {str(e)}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
+
 
 
 @app.route('/api/run-analysis/<asset>', methods=['POST'])
