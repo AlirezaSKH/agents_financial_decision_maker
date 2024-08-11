@@ -377,16 +377,28 @@ def get_enhanced_technical_analysis(data):
         indicators['OBV'] = data.ta.obv()
         
         # Volume Profile
-        indicators['Volume_Profile'] = calculate_volume_profile(data)
+        try:
+            volume_profile = data.groupby('price_bin', observed=True)['Volume'].sum().sort_values(ascending=False)
+            indicators['Volume_Profile'] = volume_profile
+        except Exception as e:
+            logger.error(f"Error calculating Volume Profile: {str(e)}")
+            indicators['Volume_Profile'] = pd.Series([np.nan] * len(data))
 
 
 
         # Ichimoku Cloud
-        ichimoku = data.ta.ichimoku()
-        indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
-        indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
-        indicators['Ichimoku_Leading_Span_A'] = ichimoku['ISA_9'].shift(26)
-        indicators['Ichimoku_Leading_Span_B'] = ichimoku['ISB_26'].shift(26)
+        try:
+            ichimoku = data.ta.ichimoku()
+            indicators['Ichimoku_Conversion_Line'] = ichimoku[0]  # ISA_9
+            indicators['Ichimoku_Base_Line'] = ichimoku[1]  # ISB_26
+            indicators['Ichimoku_Leading_Span_A'] = ichimoku[2]  # ITS_9
+            indicators['Ichimoku_Leading_Span_B'] = ichimoku[3]  # IKS_26
+        except Exception as e:
+            logger.error(f"Error calculating Ichimoku Cloud: {str(e)}")
+            indicators['Ichimoku_Conversion_Line'] = pd.Series([np.nan] * len(data))
+            indicators['Ichimoku_Base_Line'] = pd.Series([np.nan] * len(data))
+            indicators['Ichimoku_Leading_Span_A'] = pd.Series([np.nan] * len(data))
+            indicators['Ichimoku_Leading_Span_B'] = pd.Series([np.nan] * len(data))
         
         # Fibonacci Retracement
         high = data['High'].max()
@@ -413,6 +425,7 @@ def get_enhanced_technical_analysis(data):
     return indicators
 
 def run_analysis(asset):
+    logger.info(f"Starting analysis for asset: {asset}")
     try:
         shared_memory = SharedMemory()
         logger.info(f"Fetching stock data for {asset}")
@@ -576,7 +589,7 @@ def run_analysis(asset):
         
         # Save to database
         save_to_database(asset, plans['intraday'], plans['short_term'], plans['medium_term'])
-        
+        logger.info(f"Analysis completed for {asset}")
         return result
 
     except Exception as e:
