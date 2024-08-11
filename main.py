@@ -708,7 +708,7 @@ def get_analysis(asset):
 
 
 @app.route('/api/test/<asset>', methods=['GET'])
-def get_analysis(asset):
+def get_test_analysis(asset):
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
