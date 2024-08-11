@@ -9,6 +9,69 @@ import pandas as pd
 import pandas_ta as ta
 import requests
 import numpy as np
+from sqlalchemy import create_engine, Column, String, DateTime, JSON
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from flask import Flask, jsonify
+import re
+from typing import Any
+import json
+import psycopg2
+
+
+
+# Database configuration
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:Ali011111@localhost/financial_analysis')
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+class AnalysisResult(Base):
+    __tablename__ = "analysis_results"
+
+    id = Column(String, primary_key=True)
+    asset = Column(String, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    intraday_plan = Column(JSON)
+    short_term_plan = Column(JSON)
+    medium_term_plan = Column(JSON)
+
+def create_database():
+    Base.metadata.create_all(bind=engine)
+
+def save_to_database(asset, intraday_plan, short_term_plan, medium_term_plan):
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    timestamp = datetime.now().isoformat()
+    
+    # Ensure plans are dictionaries, not None
+    intraday_plan = intraday_plan or {}
+    short_term_plan = short_term_plan or {}
+    medium_term_plan = medium_term_plan or {}
+    
+    cur.execute("""
+        INSERT INTO analysis_results (id, asset, timestamp, intraday_plan, short_term_plan, medium_term_plan)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (
+        f"{asset}_{timestamp}",
+        asset,
+        timestamp,
+        json.dumps(intraday_plan),
+        json.dumps(short_term_plan),
+        json.dumps(medium_term_plan)
+    ))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print("Saved to database:")
+    print(f"Intraday Plan: {json.dumps(intraday_plan, indent=2)}")
+    print(f"Short-term Plan: {json.dumps(short_term_plan, indent=2)}")
+    print(f"Medium-term Plan: {json.dumps(medium_term_plan, indent=2)}")
+
+
 
 
 # Configure logging
@@ -121,21 +184,31 @@ def get_stock_data(symbol, period="1mo"):
                     raise ValueError(f"No data available for {symbol}")
         elif '-' in symbol:  # This is a crypto
             logger.info(f"Fetching crypto data for: {symbol}")
-            finnhub_data = get_finnhub_data(symbol)
-            if finnhub_data:
-                stock = yf.Ticker(symbol)
-                hist = stock.history(period=period)
-                hist['current_price'] = finnhub_data['c']
+            # Try yfinance first
+            data = get_yfinance_data(symbol, period)
+            if data is not None and not data.empty and data['Close'].iloc[-1] != 0:
                 price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                hist[price_columns] = hist[price_columns].round(8)
-                return hist
+                data[price_columns] = data[price_columns].round(8)
+                return data
             else:
-                logger.warning(f"Fallback to yfinance for crypto data: {symbol}")
-                data = get_yfinance_data(symbol)
-                if data is not None and not data.empty:
+                logger.warning(f"Fallback to CoinGecko API for crypto data: {symbol}")
+                # Fallback to CoinGecko API
+                coin_id = symbol.split('-')[0].lower()
+                url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=30&interval=daily"
+                response = requests.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    df = pd.DataFrame(data['prices'], columns=['timestamp', 'Close'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df.set_index('timestamp', inplace=True)
+                    df['Open'] = df['Close'].shift(1)
+                    df['High'] = df['Close']
+                    df['Low'] = df['Close']
+                    df['Volume'] = [price[1] for price in data['total_volumes']]
+                    df['current_price'] = df['Close'].iloc[-1]
                     price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                    data[price_columns] = data[price_columns].round(8)
-                    return data
+                    df[price_columns] = df[price_columns].round(8)
+                    return df
                 else:
                     raise ValueError(f"No data available for {symbol}")
         else:  # This is a stock
@@ -468,9 +541,96 @@ def run_analysis(asset):
     )
 
     result = crew.kickoff()
+    
+    print("Raw crew output:")
+    print(result)
+    
+    # Parse the result to extract plans
+    plans = parse_result(result)
+    
+    print("Parsed plans:")
+    print(json.dumps(plans, indent=2))
+    
+    # Save to database
+    save_to_database(asset, plans['intraday'], plans['short_term'], plans['medium_term'])
+    
     return result
 
+
+
+
+def parse_result(crew_result: Any) -> dict:
+    if hasattr(crew_result, 'final_output'):
+        result_text = crew_result.final_output
+    else:
+        result_text = str(crew_result)
+
+    plans = {
+        'intraday': {},
+        'short_term': {},
+        'medium_term': {}
+    }
+    
+    # Regular expressions to extract information
+    plan_regex = r"(\d+\.\s+(?:Intraday Plan|Short-term Plan \(until next week\)|Medium-term Plan \(until next month\))):(.+?)(?=\d+\.\s+(?:Intraday Plan|Short-term Plan|Medium-term Plan)|$)"
+    decision_regex = r"Decision:\s*([^.\n]+)"
+    entry_regex = r"Entry Point:\s*([^.\n]+)"
+    stop_loss_regex = r"Stop Loss:\s*([^.\n]+)"
+    target_regex = r"Target Price:\s*([^.\n]+)"
+    risk_management_regex = r"Risk Management:\s*([^.\n]+(?:\n(?!\s*-)[^.\n]+)*)"
+    
+    # Find all plans in the result
+    found_plans = re.findall(plan_regex, result_text, re.DOTALL | re.IGNORECASE)
+    
+    for plan_type, plan_content in found_plans:
+        if "Intraday Plan" in plan_type:
+            key = 'intraday'
+        elif "Short-term Plan" in plan_type:
+            key = 'short_term'
+        elif "Medium-term Plan" in plan_type:
+            key = 'medium_term'
+        else:
+            continue  # Skip if not a recognized plan type
+
+        decision = re.search(decision_regex, plan_content)
+        entry = re.search(entry_regex, plan_content)
+        stop_loss = re.search(stop_loss_regex, plan_content)
+        target = re.search(target_regex, plan_content)
+        risk_management = re.search(risk_management_regex, plan_content, re.DOTALL)
+        
+        plans[key] = {
+            'recommendation': decision.group(1).strip() if decision else None,
+            'entry': entry.group(1).strip() if entry else None,
+            'stop_loss': stop_loss.group(1).strip() if stop_loss else None,
+            'target': target.group(1).strip() if target else None,
+            'risk_management': risk_management.group(1).strip() if risk_management else None
+        }
+    
+    return plans
+
+
+
+
+app = Flask(__name__)
+
+@app.route('/api/analysis/<asset>', methods=['GET'])
+def get_analysis(asset):
+    result = get_latest_analysis(asset)
+    
+    if result:
+        return jsonify({
+            'asset': result.asset,
+            'timestamp': result.timestamp.isoformat(),
+            'intraday_plan': result.intraday_plan,
+            'short_term_plan': result.short_term_plan,
+            'medium_term_plan': result.medium_term_plan
+        })
+    else:
+        return jsonify({'error': 'No analysis found for this asset'}), 404
+
 if __name__ == "__main__":
+    create_database()
+    
     if len(sys.argv) != 2:
         print("Usage: python financial_decision_ai.py <asset_symbol>")
         sys.exit(1)
@@ -481,6 +641,9 @@ if __name__ == "__main__":
         logger.info(f"Starting analysis for {asset}")
         result = run_analysis(asset)
         print(result)
+        
+        # Start the Flask app
+        app.run(debug=True)
     except Exception as e:
         logger.error(f"An error occurred on {datetime.now().date()}: {str(e)}")
         print(f"An error occurred: {str(e)}")
