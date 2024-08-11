@@ -21,7 +21,7 @@ import psycopg2
 
 
 # Database configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:Ali011111@localhost/financial_analysis')
+DATABASE_URL = os.getenv('DATABASE_URL')#'postgresql://postgres:Ali011111@localhost/financial_analysis'
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -609,24 +609,74 @@ def parse_result(crew_result: Any) -> dict:
     return plans
 
 
+def get_latest_analysis(asset):
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM analysis_results 
+        WHERE asset = %s 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    """, (asset,))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if result:
+        return {
+            'asset': result[1],
+            'timestamp': result[2],
+            'intraday_plan': json.loads(result[3]),
+            'short_term_plan': json.loads(result[4]),
+            'medium_term_plan': json.loads(result[5])
+        }
+    return None
+
+
+
+def create_table_if_not_exists():
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_results (
+            id VARCHAR(255) PRIMARY KEY,
+            asset VARCHAR(50),
+            timestamp TIMESTAMP,
+            intraday_plan JSON,
+            short_term_plan JSON,
+            medium_term_plan JSON
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("Table 'analysis_results' created or already exists.")
+
+
 
 
 app = Flask(__name__)
+create_table_if_not_exists()
 
 @app.route('/api/analysis/<asset>', methods=['GET'])
 def get_analysis(asset):
     result = get_latest_analysis(asset)
-    
     if result:
-        return jsonify({
-            'asset': result.asset,
-            'timestamp': result.timestamp.isoformat(),
-            'intraday_plan': result.intraday_plan,
-            'short_term_plan': result.short_term_plan,
-            'medium_term_plan': result.medium_term_plan
-        })
+        return jsonify(result)
     else:
         return jsonify({'error': 'No analysis found for this asset'}), 404
+
+
+@app.route('/api/run-analysis/<asset>', methods=['POST'])
+def run_new_analysis(asset):
+    try:
+        result = run_analysis(asset)
+        return jsonify({'message': 'Analysis completed', 'result': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
 
 if __name__ == "__main__":
     create_database()
