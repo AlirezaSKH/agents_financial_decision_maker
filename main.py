@@ -326,6 +326,24 @@ def calculate_ichimoku_cloud(data):
     }
 
 
+def calculate_price_bins(data, n_bins=10):
+    """
+    Calculate price bins for the given data.
+    
+    :param data: DataFrame with 'Close' column
+    :param n_bins: Number of bins to divide the price range into
+    :return: DataFrame with 'price_bin' column added
+    """
+    price_range = data['Close'].max() - data['Close'].min()
+    bin_size = price_range / n_bins
+    bins = [data['Close'].min() + i * bin_size for i in range(n_bins + 1)]
+    labels = [f"{bins[i]:.2f}-{bins[i+1]:.2f}" for i in range(n_bins)]
+    data['price_bin'] = pd.cut(data['Close'], bins=bins, labels=labels, include_lowest=True)
+    return data
+
+
+
+
 
 def get_enhanced_technical_analysis(data):
     """
@@ -347,6 +365,9 @@ def get_enhanced_technical_analysis(data):
         return {}
 
     try:
+        # Calculate price bins before volume profile
+        data = calculate_price_bins(data)
+
         # Simple Moving Averages
         indicators['SMA_10'] = ta.sma(data['Close'], length=10)
         indicators['SMA_20'] = ta.sma(data['Close'], length=20)
@@ -426,7 +447,7 @@ def get_enhanced_technical_analysis(data):
         # On-Balance Volume
         indicators['OBV'] = ta.obv(data['Close'], data['Volume'])
         
-        # Volume Profile (Correct calculation assuming 'price_bin' is a separate step)
+        # Volume Profile
         try:
             volume_profile = data.groupby('price_bin')['Volume'].sum().sort_values(ascending=False)
             indicators['Volume_Profile'] = volume_profile
@@ -436,11 +457,11 @@ def get_enhanced_technical_analysis(data):
         
         # Ichimoku Cloud
         try:
-            ichimoku = ta.ichimoku(data['High'], data['Low'], data['Close'])
-            indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
-            indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
-            indicators['Ichimoku_Leading_Span_A'] = ichimoku['ITS_9']
-            indicators['Ichimoku_Leading_Span_B'] = ichimoku['IKS_26']
+            conversion_line, base_line, leading_span_a, leading_span_b, lagging_span = calculate_ichimoku_cloud(data)
+            indicators['Ichimoku_Conversion_Line'] = conversion_line
+            indicators['Ichimoku_Base_Line'] = base_line
+            indicators['Ichimoku_Leading_Span_A'] = leading_span_a
+            indicators['Ichimoku_Leading_Span_B'] = leading_span_b
         except Exception as e:
             logger.error(f"Error calculating Ichimoku Cloud: {str(e)}")
             indicators['Ichimoku_Conversion_Line'] = pd.Series([np.nan] * len(data))
@@ -470,6 +491,7 @@ def get_enhanced_technical_analysis(data):
         return {}  # Return an empty dictionary if there's an error
     
     return indicators
+
 
 def run_analysis(asset):
     logger.info(f"Starting analysis for asset: {asset}")
