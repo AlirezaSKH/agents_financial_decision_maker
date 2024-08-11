@@ -650,27 +650,33 @@ def parse_result(crew_result: Any) -> dict:
 
 
 def get_latest_analysis(asset):
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT * FROM analysis_results 
-        WHERE asset = %s 
-        ORDER BY timestamp DESC 
-        LIMIT 1
-    """, (asset,))
-    result = cur.fetchone()
-    cur.close()
-    conn.close()
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM analysis_results WHERE asset = %s ORDER BY timestamp DESC LIMIT 1", (asset,))
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
 
-    if result:
-        return {
-            'asset': result[1],
-            'timestamp': result[2],
-            'intraday_plan': json.loads(result[3]),
-            'short_term_plan': json.loads(result[4]),
-            'medium_term_plan': json.loads(result[5])
-        }
-    return None
+        if result:
+            # Check if each field is a string before attempting to parse it as JSON
+            intraday_plan = json.loads(result[3]) if isinstance(result[3], str) else result[3]
+            short_term_plan = json.loads(result[4]) if isinstance(result[4], str) else result[4]
+            medium_term_plan = json.loads(result[5]) if isinstance(result[5], str) else result[5]
+
+            return {
+                'id': result[0],
+                'asset': result[1],
+                'timestamp': result[2].isoformat(),
+                'intraday_plan': intraday_plan,
+                'short_term_plan': short_term_plan,
+                'medium_term_plan': medium_term_plan
+            }
+        else:
+            return None
+    except Exception as e:
+        app.logger.error(f"Error retrieving latest analysis for {asset}: {str(e)}", exc_info=True)
+        return None
 
 
 
