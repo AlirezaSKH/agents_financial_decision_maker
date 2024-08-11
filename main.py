@@ -284,277 +284,286 @@ def get_enhanced_technical_analysis(data):
     :return: Dictionary containing calculated technical indicators
     """
     indicators = {}
-    
-    # Simple Moving Averages
-    indicators['SMA_10'] = data.ta.sma(length=10)
-    indicators['SMA_20'] = data.ta.sma(length=20)
-    indicators['SMA_50'] = data.ta.sma(length=50)
-    
-    # Exponential Moving Averages
-    indicators['EMA_10'] = data.ta.ema(length=10)
-    indicators['EMA_20'] = data.ta.ema(length=20)
-    indicators['EMA_50'] = data.ta.ema(length=50)
-    
-    # Relative Strength Index
-    indicators['RSI'] = data.ta.rsi()
-    
-    # Moving Average Convergence Divergence
     try:
-        macd = data.ta.macd()
-        indicators['MACD'] = macd['MACD_12_26_9']
-        indicators['MACD_Signal'] = macd['MACDs_12_26_9']
-        indicators['MACD_Hist'] = macd['MACDh_12_26_9']
-    except KeyError:
-        # Fallback method for MACD calculation
-        exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-        indicators['MACD'] = exp1 - exp2
-        indicators['MACD_Signal'] = indicators['MACD'].ewm(span=9, adjust=False).mean()
-        indicators['MACD_Hist'] = indicators['MACD'] - indicators['MACD_Signal']
-    
-    # Bollinger Bands
-    try:
-        bbands = data.ta.bbands()
-        indicators['Upper_BB'] = bbands['BBU_20_2.0']
-        indicators['Middle_BB'] = bbands['BBM_20_2.0']
-        indicators['Lower_BB'] = bbands['BBL_20_2.0']
-    except KeyError:
-        # Fallback method for Bollinger Bands calculation
-        period = 20
-        std_dev = 2
-        rolling_mean = data['Close'].rolling(window=period).mean()
-        rolling_std = data['Close'].rolling(window=period).std()
-        indicators['Upper_BB'] = rolling_mean + (rolling_std * std_dev)
-        indicators['Middle_BB'] = rolling_mean
-        indicators['Lower_BB'] = rolling_mean - (rolling_std * std_dev)
-    
-    # Stochastic Oscillator
-    try:
-        stoch = data.ta.stoch()
-        indicators['STOCH_K'] = stoch['STOCHk_14_3_3']
-        indicators['STOCH_D'] = stoch['STOCHd_14_3_3']
-    except KeyError:
-        # Fallback method for Stochastic Oscillator calculation
-        period = 14
-        k = 3
-        d = 3
-        low_min = data['Low'].rolling(window=period).min()
-        high_max = data['High'].rolling(window=period).max()
-        indicators['STOCH_K'] = ((data['Close'] - low_min) / (high_max - low_min)) * 100
-        indicators['STOCH_D'] = indicators['STOCH_K'].rolling(window=d).mean()
-    
-    # Average Directional Index
-    try:
-        indicators['ADX'] = data.ta.adx()['ADX_14']
-    except KeyError:
-        # We'll skip ADX if it's not available, as it's complex to calculate manually
-        indicators['ADX'] = np.nan
-    
-    # Commodity Channel Index
-    try:
-        indicators['CCI'] = data.ta.cci()
-    except:
-        # Fallback method for CCI calculation
-        period = 20
-        tp = (data['High'] + data['Low'] + data['Close']) / 3
-        sma_tp = tp.rolling(window=period).mean()
-        mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
-        indicators['CCI'] = (tp - sma_tp) / (0.015 * mad)
-    
-    # On-Balance Volume
-    indicators['OBV'] = data.ta.obv()
-    
-    # Volume Profile
-    indicators['Volume_Profile'] = calculate_volume_profile(data)
+        # Simple Moving Averages
+        indicators['SMA_10'] = data.ta.sma(length=10)
+        indicators['SMA_20'] = data.ta.sma(length=20)
+        indicators['SMA_50'] = data.ta.sma(length=50)
+        
+        # Exponential Moving Averages
+        indicators['EMA_10'] = data.ta.ema(length=10)
+        indicators['EMA_20'] = data.ta.ema(length=20)
+        indicators['EMA_50'] = data.ta.ema(length=50)
+        
+        # Relative Strength Index
+        indicators['RSI'] = data.ta.rsi()
+        
+        # Moving Average Convergence Divergence
+        try:
+            macd = data.ta.macd()
+            indicators['MACD'] = macd['MACD_12_26_9']
+            indicators['MACD_Signal'] = macd['MACDs_12_26_9']
+            indicators['MACD_Hist'] = macd['MACDh_12_26_9']
+        except KeyError:
+            # Fallback method for MACD calculation
+            exp1 = data['Close'].ewm(span=12, adjust=False).mean()
+            exp2 = data['Close'].ewm(span=26, adjust=False).mean()
+            indicators['MACD'] = exp1 - exp2
+            indicators['MACD_Signal'] = indicators['MACD'].ewm(span=9, adjust=False).mean()
+            indicators['MACD_Hist'] = indicators['MACD'] - indicators['MACD_Signal']
+        
+        # Bollinger Bands
+        try:
+            bbands = data.ta.bbands()
+            indicators['Upper_BB'] = bbands['BBU_20_2.0']
+            indicators['Middle_BB'] = bbands['BBM_20_2.0']
+            indicators['Lower_BB'] = bbands['BBL_20_2.0']
+        except KeyError:
+            # Fallback method for Bollinger Bands calculation
+            period = 20
+            std_dev = 2
+            rolling_mean = data['Close'].rolling(window=period).mean()
+            rolling_std = data['Close'].rolling(window=period).std()
+            indicators['Upper_BB'] = rolling_mean + (rolling_std * std_dev)
+            indicators['Middle_BB'] = rolling_mean
+            indicators['Lower_BB'] = rolling_mean - (rolling_std * std_dev)
+        
+        # Stochastic Oscillator
+        try:
+            stoch = data.ta.stoch()
+            indicators['STOCH_K'] = stoch['STOCHk_14_3_3']
+            indicators['STOCH_D'] = stoch['STOCHd_14_3_3']
+        except KeyError:
+            # Fallback method for Stochastic Oscillator calculation
+            period = 14
+            k = 3
+            d = 3
+            low_min = data['Low'].rolling(window=period).min()
+            high_max = data['High'].rolling(window=period).max()
+            indicators['STOCH_K'] = ((data['Close'] - low_min) / (high_max - low_min)) * 100
+            indicators['STOCH_D'] = indicators['STOCH_K'].rolling(window=d).mean()
+        
+        # Average Directional Index
+        try:
+            indicators['ADX'] = data.ta.adx()['ADX_14']
+        except KeyError:
+            # We'll skip ADX if it's not available, as it's complex to calculate manually
+            indicators['ADX'] = np.nan
+        
+        # Commodity Channel Index
+        try:
+            indicators['CCI'] = data.ta.cci()
+        except:
+            # Fallback method for CCI calculation
+            period = 20
+            tp = (data['High'] + data['Low'] + data['Close']) / 3
+            sma_tp = tp.rolling(window=period).mean()
+            mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
+            indicators['CCI'] = (tp - sma_tp) / (0.015 * mad)
+        
+        # On-Balance Volume
+        indicators['OBV'] = data.ta.obv()
+        
+        # Volume Profile
+        indicators['Volume_Profile'] = calculate_volume_profile(data)
 
 
 
-    # Ichimoku Cloud
-    ichimoku = data.ta.ichimoku()
-    indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
-    indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
-    indicators['Ichimoku_Leading_Span_A'] = ichimoku['ISA_9'].shift(26)
-    indicators['Ichimoku_Leading_Span_B'] = ichimoku['ISB_26'].shift(26)
-    
-    # Fibonacci Retracement
-    high = data['High'].max()
-    low = data['Low'].min()
-    diff = high - low
-    indicators['Fib_23.6'] = high - (diff * 0.236)
-    indicators['Fib_38.2'] = high - (diff * 0.382)
-    indicators['Fib_50.0'] = high - (diff * 0.5)
-    indicators['Fib_61.8'] = high - (diff * 0.618)
-    
-    # Pivot Points
-    indicators['Pivot_Point'] = (data['High'].iloc[-1] + data['Low'].iloc[-1] + data['Close'].iloc[-1]) / 3
-    indicators['R1'] = 2 * indicators['Pivot_Point'] - data['Low'].iloc[-1]
-    indicators['S1'] = 2 * indicators['Pivot_Point'] - data['High'].iloc[-1]
-    
-    # Average True Range (ATR)
-    indicators['ATR'] = data.ta.atr()
+        # Ichimoku Cloud
+        ichimoku = data.ta.ichimoku()
+        indicators['Ichimoku_Conversion_Line'] = ichimoku['ISA_9']
+        indicators['Ichimoku_Base_Line'] = ichimoku['ISB_26']
+        indicators['Ichimoku_Leading_Span_A'] = ichimoku['ISA_9'].shift(26)
+        indicators['Ichimoku_Leading_Span_B'] = ichimoku['ISB_26'].shift(26)
+        
+        # Fibonacci Retracement
+        high = data['High'].max()
+        low = data['Low'].min()
+        diff = high - low
+        indicators['Fib_23.6'] = high - (diff * 0.236)
+        indicators['Fib_38.2'] = high - (diff * 0.382)
+        indicators['Fib_50.0'] = high - (diff * 0.5)
+        indicators['Fib_61.8'] = high - (diff * 0.618)
+        
+        # Pivot Points
+        indicators['Pivot_Point'] = (data['High'].iloc[-1] + data['Low'].iloc[-1] + data['Close'].iloc[-1]) / 3
+        indicators['R1'] = 2 * indicators['Pivot_Point'] - data['Low'].iloc[-1]
+        indicators['S1'] = 2 * indicators['Pivot_Point'] - data['High'].iloc[-1]
+        
+        # Average True Range (ATR)
+        indicators['ATR'] = data.ta.atr()
 
+    
+    except Exception as e:
+        logger.error(f"Error in get_enhanced_technical_analysis: {str(e)}", exc_info=True)
+        return {}  # Return an empty dictionary if there's an error
     
     return indicators
 
 def run_analysis(asset):
-    shared_memory = SharedMemory()
-    current_data = get_stock_data(asset)
-    
-    if current_data is None or current_data.empty:
-        raise ValueError(f"No data available for {asset}")
-    
-    current_price = current_data['current_price'].iloc[-1] if 'current_price' in current_data else current_data['Close'].iloc[-1]
-    news = get_news(asset)
-    economic_indicators = get_economic_indicators()
-    
-    # Calculate enhanced technical indicators
     try:
-        technical_indicators = get_enhanced_technical_analysis(current_data)
+        shared_memory = SharedMemory()
+        current_data = get_stock_data(asset)
+        
+        if current_data is None or current_data.empty:
+            raise ValueError(f"No data available for {asset}")
+        
+        current_price = current_data['current_price'].iloc[-1] if 'current_price' in current_data else current_data['Close'].iloc[-1]
+        news = get_news(asset)
+        economic_indicators = get_economic_indicators()
+        
+        # Calculate enhanced technical indicators
+        try:
+            technical_indicators = get_enhanced_technical_analysis(current_data)
+        except Exception as e:
+            logger.error(f"Error calculating technical indicators: {str(e)}")
+            technical_indicators = {}  # Use an empty dict if calculation fails
+        
+        # Store all data in shared memory
+        shared_memory.set('current_data', current_data)
+        shared_memory.set('news', news)
+        shared_memory.set('economic_indicators', economic_indicators)
+        shared_memory.set('technical_indicators', technical_indicators)
+
+        # Define agents
+        data_collection_agent = Agent(
+            role='Data Collection Specialist',
+            goal='Collect and preprocess financial data',
+            backstory="You are an expert in collecting and preprocessing financial data. Your job is to gather relevant information about the given asset and prepare it for analysis.",
+            verbose=True,
+            allow_delegation=False,
+            llm=ChatOpenAI(model_name="gpt-4", temperature=0)
+        )
+
+        analysis_agent = Agent(
+            role='Financial Analyst',
+            goal='Analyze financial data and provide insights',
+            backstory="You are a seasoned financial analyst with expertise in interpreting market trends, financial indicators, and economic data. Your task is to analyze the preprocessed data and provide valuable insights.",
+            verbose=True,
+            allow_delegation=False,
+            llm=ChatOpenAI(model_name="gpt-4", temperature=0)
+        )
+
+        decision_making_agent = Agent(
+            role='Investment Decision Maker',
+            goal='Make informed investment decisions based on technical analysis and market structure',
+            backstory="You are a professional investment decision maker with years of experience in the financial markets. Your expertise lies in analyzing market structure across multiple timeframes to identify key support and resistance levels. You excel at making trading decisions that balance technical analysis with sound risk management principles. Your recommendations are known for their logical stop loss and target levels based on significant market levels rather than arbitrary percentages.",
+            verbose=True,
+            allow_delegation=False,
+            llm=ChatOpenAI(model_name="gpt-4", temperature=0)
+        )
+
+        # Define tasks
+        data_collection_task = Task(
+            description=f"Collect and preprocess financial data for {asset}. Use the get_stock_data function to fetch the data and store it in the shared memory. The current price is ${current_price:.5f}. Also, collect the latest news and economic indicators.",
+            agent=data_collection_agent,
+            expected_output="A summary of the collected and preprocessed financial data for the given asset, including the current price, recent news, and relevant economic indicators."
+        )
+
+        analysis_task = Task(
+        description=f"""Analyze the preprocessed financial data for {asset}. The current price is ${current_price:.5f}. 
+        Provide insights on market trends, key indicators, and potential risks across multiple timeframes (intraday, short-term, medium-term, and long-term). 
+        Consider the following in your analysis:
+        1. Technical analysis of price trends and patterns, including the enhanced technical indicators provided:
+        - Moving Averages (Simple and Exponential)
+        - Relative Strength Index (RSI)
+        - Moving Average Convergence Divergence (MACD)
+        - Bollinger Bands
+        - Stochastic Oscillator
+        - Average Directional Index (ADX)
+        - Commodity Channel Index (CCI)
+        - On-Balance Volume (OBV)
+        - Volume Profile (to identify significant price levels based on trading volume)
+        - Ichimoku Cloud
+        - Fibonacci Retracement levels
+        - Pivot Points
+        - Average True Range (ATR)
+        2. Recent news and its potential impact on the asset in different timeframes
+        3. Economic indicators: interest rates, unemployment rate, cash rate, PMI, ISM, and NFP
+        4. Any other relevant factors that could influence the asset's price
+        
+        Pay special attention to the Volume Profile indicator and the newly added indicators, as they can help identify key support and resistance levels. Use this information to reinforce or question other technical indicators and price action analysis.
+        
+        For each timeframe (intraday, short-term, medium-term, and long-term), provide:
+        - The overall trend
+        - Key support and resistance levels
+        - Potential pivot points or areas of interest
+        - Any divergences or conflicting signals between different indicators""",
+        agent=analysis_agent,
+        expected_output="A comprehensive analysis of the financial data, including identified trends, key indicators, potential risks, and the impact of fundamental factors across multiple timeframes. Provide insights based on the enhanced technical indicators, with a focus on how the new indicators (Ichimoku Cloud, Fibonacci Retracement, Pivot Points, ATR) support or conflict with other indicators and price action. Clearly differentiate between intraday, short-term, medium-term, and long-term outlooks."
+    )
+
+        decision_making_task = Task(
+        description=f"""Based on the analysis provided and the current price of ${current_price:.5f} for {asset}, make informed investment decisions for three distinct timeframes. 
+        Provide clear recommendations along with the rationale behind each. 
+        Your recommendations should include:
+
+        1. Intraday Plan (for today):
+        - Whether to buy, sell, or hold the asset
+        - Entry point price (consider a range if appropriate, based on key support/resistance levels)
+        - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
+        - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
+        - Risk management considerations, including position sizing recommendations
+
+        2. Short-term Plan (until next week):
+        - Whether to buy, sell, or hold the asset
+        - Entry point price (consider a range if appropriate, based on key support/resistance levels)
+        - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
+        - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
+        - Risk management considerations, including position sizing recommendations
+
+        3. Medium-term Plan (until next month):
+        - Whether to buy, sell, or hold the asset
+        - Entry point price (consider a range if appropriate, based on key support/resistance levels)
+        - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
+        - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
+        - Risk management considerations, including position sizing recommendations
+
+        For each plan:
+        - Use technical analysis, including the enhanced indicators provided, to identify key support and resistance levels.
+        - Set stop loss at a logical level based on the market structure, not just a fixed percentage also ATR is really important for stoploss.
+        - Determine target prices based on significant resistance or support levels, depending on the trade direction.
+        - Ensure that the potential reward is greater than the risk. The distance to the target should be larger than the distance to the stop loss.
+        - Consider using multiple targets if appropriate, based on different resistance/support levels.
+        - Take into account the asset's volatility when determining stop loss and target levels.
+        - Explain the rationale behind each level (entry, stop loss, and targets) in terms of technical analysis and market structure.
+        - Incorporate insights from the Volume Profile indicator to validate or adjust your support and resistance levels.
+
+        Important guidelines:
+        - Clearly state any relevant conditions that might invalidate each recommendation.
+        - Remember, while maintaining a favorable risk-reward ratio is important, the specific levels should be based on the asset's price action and key technical levels, not arbitrary percentages.
+        - Be aware that recommendations may differ between timeframes due to different market dynamics and analysis perspectives.""",
+        agent=decision_making_agent,
+        expected_output="Three clear investment recommendations (intraday, short-term, and medium-term) with detailed rationales based on the provided analysis. Include structured plans with entry points, stop losses, and target prices that reflect key support and resistance levels for each timeframe. Explain the technical basis for each level and ensure the overall plans adhere to sound risk management principles."
+    )
+
+        # Create Crew
+        crew = Crew(
+            agents=[data_collection_agent, analysis_agent, decision_making_agent],
+            tasks=[data_collection_task, analysis_task, decision_making_task],
+            verbose=2,
+            process=Process.sequential
+        )
+
+        result = crew.kickoff()
+        
+        print("Raw crew output:")
+        print(result)
+        
+        # Parse the result to extract plans
+        plans = parse_result(result)
+        
+        print("Parsed plans:")
+        print(json.dumps(plans, indent=2))
+        
+        # Save to database
+        save_to_database(asset, plans['intraday'], plans['short_term'], plans['medium_term'])
+        
+        return result
+
     except Exception as e:
-        logger.error(f"Error calculating technical indicators: {str(e)}")
-        technical_indicators = {}  # Use an empty dict if calculation fails
-    
-    # Store all data in shared memory
-    shared_memory.set('current_data', current_data)
-    shared_memory.set('news', news)
-    shared_memory.set('economic_indicators', economic_indicators)
-    shared_memory.set('technical_indicators', technical_indicators)
-
-    # Define agents
-    data_collection_agent = Agent(
-        role='Data Collection Specialist',
-        goal='Collect and preprocess financial data',
-        backstory="You are an expert in collecting and preprocessing financial data. Your job is to gather relevant information about the given asset and prepare it for analysis.",
-        verbose=True,
-        allow_delegation=False,
-        llm=ChatOpenAI(model_name="gpt-4", temperature=0)
-    )
-
-    analysis_agent = Agent(
-        role='Financial Analyst',
-        goal='Analyze financial data and provide insights',
-        backstory="You are a seasoned financial analyst with expertise in interpreting market trends, financial indicators, and economic data. Your task is to analyze the preprocessed data and provide valuable insights.",
-        verbose=True,
-        allow_delegation=False,
-        llm=ChatOpenAI(model_name="gpt-4", temperature=0)
-    )
-
-    decision_making_agent = Agent(
-        role='Investment Decision Maker',
-        goal='Make informed investment decisions based on technical analysis and market structure',
-        backstory="You are a professional investment decision maker with years of experience in the financial markets. Your expertise lies in analyzing market structure across multiple timeframes to identify key support and resistance levels. You excel at making trading decisions that balance technical analysis with sound risk management principles. Your recommendations are known for their logical stop loss and target levels based on significant market levels rather than arbitrary percentages.",
-        verbose=True,
-        allow_delegation=False,
-        llm=ChatOpenAI(model_name="gpt-4", temperature=0)
-    )
-
-    # Define tasks
-    data_collection_task = Task(
-        description=f"Collect and preprocess financial data for {asset}. Use the get_stock_data function to fetch the data and store it in the shared memory. The current price is ${current_price:.5f}. Also, collect the latest news and economic indicators.",
-        agent=data_collection_agent,
-        expected_output="A summary of the collected and preprocessed financial data for the given asset, including the current price, recent news, and relevant economic indicators."
-    )
-
-    analysis_task = Task(
-    description=f"""Analyze the preprocessed financial data for {asset}. The current price is ${current_price:.5f}. 
-    Provide insights on market trends, key indicators, and potential risks across multiple timeframes (intraday, short-term, medium-term, and long-term). 
-    Consider the following in your analysis:
-    1. Technical analysis of price trends and patterns, including the enhanced technical indicators provided:
-       - Moving Averages (Simple and Exponential)
-       - Relative Strength Index (RSI)
-       - Moving Average Convergence Divergence (MACD)
-       - Bollinger Bands
-       - Stochastic Oscillator
-       - Average Directional Index (ADX)
-       - Commodity Channel Index (CCI)
-       - On-Balance Volume (OBV)
-       - Volume Profile (to identify significant price levels based on trading volume)
-       - Ichimoku Cloud
-       - Fibonacci Retracement levels
-       - Pivot Points
-       - Average True Range (ATR)
-    2. Recent news and its potential impact on the asset in different timeframes
-    3. Economic indicators: interest rates, unemployment rate, cash rate, PMI, ISM, and NFP
-    4. Any other relevant factors that could influence the asset's price
-    
-    Pay special attention to the Volume Profile indicator and the newly added indicators, as they can help identify key support and resistance levels. Use this information to reinforce or question other technical indicators and price action analysis.
-    
-    For each timeframe (intraday, short-term, medium-term, and long-term), provide:
-    - The overall trend
-    - Key support and resistance levels
-    - Potential pivot points or areas of interest
-    - Any divergences or conflicting signals between different indicators""",
-    agent=analysis_agent,
-    expected_output="A comprehensive analysis of the financial data, including identified trends, key indicators, potential risks, and the impact of fundamental factors across multiple timeframes. Provide insights based on the enhanced technical indicators, with a focus on how the new indicators (Ichimoku Cloud, Fibonacci Retracement, Pivot Points, ATR) support or conflict with other indicators and price action. Clearly differentiate between intraday, short-term, medium-term, and long-term outlooks."
-)
-
-    decision_making_task = Task(
-    description=f"""Based on the analysis provided and the current price of ${current_price:.5f} for {asset}, make informed investment decisions for three distinct timeframes. 
-    Provide clear recommendations along with the rationale behind each. 
-    Your recommendations should include:
-
-    1. Intraday Plan (for today):
-       - Whether to buy, sell, or hold the asset
-       - Entry point price (consider a range if appropriate, based on key support/resistance levels)
-       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
-       - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
-       - Risk management considerations, including position sizing recommendations
-
-    2. Short-term Plan (until next week):
-       - Whether to buy, sell, or hold the asset
-       - Entry point price (consider a range if appropriate, based on key support/resistance levels)
-       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
-       - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
-       - Risk management considerations, including position sizing recommendations
-
-    3. Medium-term Plan (until next month):
-       - Whether to buy, sell, or hold the asset
-       - Entry point price (consider a range if appropriate, based on key support/resistance levels)
-       - Stop loss price (based on the nearest strong support level for long trades, or resistance level for short trades also ATR is really important for stoploss)
-       - Target price(s) (based on key resistance levels for long trades, or support levels for short trades)
-       - Risk management considerations, including position sizing recommendations
-
-    For each plan:
-    - Use technical analysis, including the enhanced indicators provided, to identify key support and resistance levels.
-    - Set stop loss at a logical level based on the market structure, not just a fixed percentage also ATR is really important for stoploss.
-    - Determine target prices based on significant resistance or support levels, depending on the trade direction.
-    - Ensure that the potential reward is greater than the risk. The distance to the target should be larger than the distance to the stop loss.
-    - Consider using multiple targets if appropriate, based on different resistance/support levels.
-    - Take into account the asset's volatility when determining stop loss and target levels.
-    - Explain the rationale behind each level (entry, stop loss, and targets) in terms of technical analysis and market structure.
-    - Incorporate insights from the Volume Profile indicator to validate or adjust your support and resistance levels.
-
-    Important guidelines:
-    - Clearly state any relevant conditions that might invalidate each recommendation.
-    - Remember, while maintaining a favorable risk-reward ratio is important, the specific levels should be based on the asset's price action and key technical levels, not arbitrary percentages.
-    - Be aware that recommendations may differ between timeframes due to different market dynamics and analysis perspectives.""",
-    agent=decision_making_agent,
-    expected_output="Three clear investment recommendations (intraday, short-term, and medium-term) with detailed rationales based on the provided analysis. Include structured plans with entry points, stop losses, and target prices that reflect key support and resistance levels for each timeframe. Explain the technical basis for each level and ensure the overall plans adhere to sound risk management principles."
-)
-
-    # Create Crew
-    crew = Crew(
-        agents=[data_collection_agent, analysis_agent, decision_making_agent],
-        tasks=[data_collection_task, analysis_task, decision_making_task],
-        verbose=2,
-        process=Process.sequential
-    )
-
-    result = crew.kickoff()
-    
-    print("Raw crew output:")
-    print(result)
-    
-    # Parse the result to extract plans
-    plans = parse_result(result)
-    
-    print("Parsed plans:")
-    print(json.dumps(plans, indent=2))
-    
-    # Save to database
-    save_to_database(asset, plans['intraday'], plans['short_term'], plans['medium_term'])
-    
-    return result
+        logger.error(f"Error in run_analysis: {str(e)}", exc_info=True)
+        raise  # Re-raise the exception after logging
 
 
 
@@ -673,6 +682,7 @@ def run_new_analysis(asset):
         result = run_analysis(asset)
         return jsonify({'message': 'Analysis completed', 'result': result}), 200
     except Exception as e:
+        app.logger.error(f"Error in run_analysis: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
