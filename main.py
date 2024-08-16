@@ -17,7 +17,7 @@ import re
 from typing import Any
 import json
 import psycopg2
-
+from urllib.parse import quote, unquote
 
 
 # Database configuration
@@ -494,6 +494,7 @@ def get_enhanced_technical_analysis(data):
 
 
 def run_analysis(asset):
+    normalized_asset = normalize_asset(asset)
     logger.info(f"Starting analysis for asset: {asset}")
     try:
         shared_memory = SharedMemory()
@@ -657,8 +658,13 @@ def run_analysis(asset):
         print(json.dumps(plans, indent=2))
         
         # Save to database
-        save_to_database(asset, plans['intraday'], plans['short_term'], plans['medium_term'])
-        logger.info(f"Analysis completed for {asset}")
+        save_to_database(normalized_asset, plans['intraday'], plans['short_term'], plans['medium_term'])
+        logger.info(f"Analysis completed for {asset} (normalized: {normalized_asset})")
+        
+        # Denormalize asset name in the result
+        if isinstance(result, dict) and 'asset' in result:
+            result['asset'] = denormalize_asset(result['asset'])
+        
         return result
 
     except Exception as e:
@@ -719,10 +725,11 @@ def parse_result(crew_result: Any) -> dict:
 
 
 def get_latest_analysis(asset):
+    normalized_asset = normalize_asset(asset)
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
-        cur.execute("SELECT * FROM analysis_results WHERE asset = %s ORDER BY timestamp DESC LIMIT 1", (asset,))
+        cur.execute("SELECT * FROM analysis_results WHERE asset = %s ORDER BY timestamp DESC LIMIT 1", (normalized_asset,))
         result = cur.fetchone()
         cur.close()
         conn.close()
@@ -735,7 +742,7 @@ def get_latest_analysis(asset):
 
             return {
                 'id': result[0],
-                'asset': result[1],
+                'asset': denormalize_asset(result[1]),
                 'timestamp': result[2].isoformat(),
                 'intraday_plan': intraday_plan,
                 'short_term_plan': short_term_plan,
@@ -744,7 +751,7 @@ def get_latest_analysis(asset):
         else:
             return None
     except Exception as e:
-        app.logger.error(f"Error retrieving latest analysis for {asset}: {str(e)}", exc_info=True)
+        app.logger.error(f"Error retrieving latest analysis for {asset} (normalized: {normalized_asset}): {str(e)}", exc_info=True)
         return None
 
 
@@ -767,6 +774,18 @@ def create_table_if_not_exists():
     conn.close()
     print("Table 'analysis_results' created or already exists.")
 
+def normalize_asset(asset):
+    """Normalize asset string to internal format."""
+    if '-' in asset:
+        parts = asset.split('-')
+        if len(parts) == 2:
+            return f"{parts[0]}/{parts[1]}"
+    return asset  # Return as-is if it doesn't match the expected format
+
+
+def denormalize_asset(asset):
+    """Convert internal asset format to API format."""
+    return asset.replace('/', '-')
 
 
 
@@ -775,12 +794,23 @@ create_table_if_not_exists()
 
 @app.route('/api/analysis/<asset>', methods=['GET'])
 def get_analysis(asset):
-    result = get_latest_analysis(asset)
-    if result:
-        return jsonify(result)
-    else:
-        return jsonify({'error': 'No analysis found for this asset'}), 404
-
+    normalized_asset = normalize_asset(asset)
+    app.logger.info(f"Received GET request for asset: {asset} (normalized: {normalized_asset})")
+    try:
+        result = get_latest_analysis(normalized_asset)
+        if result:
+            # Denormalize the asset name in the result
+            if isinstance(result, dict) and 'asset' in result:
+                result['asset'] = denormalize_asset(result['asset'])
+            
+            app.logger.info(f"Analysis retrieved for asset: {asset}")
+            return jsonify({'message': 'Analysis retrieved', 'result': result}), 200
+        else:
+            app.logger.warning(f"No analysis found for asset: {asset}")
+            return jsonify({'error': 'No analysis found for this asset'}), 404
+    except Exception as e:
+        app.logger.error(f"Error retrieving analysis for asset {asset}: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/test/<asset>', methods=['GET'])
 def get_test_analysis(asset):
@@ -811,9 +841,20 @@ def get_test_analysis(asset):
 
 @app.route('/api/run-analysis/<asset>', methods=['POST'])
 def run_new_analysis(asset):
-    app.logger.info(f"Received request for asset: {asset}")
+    normalized_asset = normalize_asset(asset)
+    app.logger.info(f"Received request for asset: {asset} (normalized: {normalized_asset})")
     try:
-        result = run_analysis(asset)
+        result = run_analysis(normalized_asset)
+        
+        # Check if result is None or empty
+        if not result:
+            app.logger.warning(f"No analysis result for asset: {normalized_asset}")
+            return jsonify({'message': 'No analysis result', 'asset': asset}), 404
+
+        # Assuming result is a dictionary, let's denormalize the asset name in the result
+        if isinstance(result, dict) and 'asset' in result:
+            result['asset'] = denormalize_asset(result['asset'])
+
         app.logger.info(f"Analysis completed for asset: {asset}")
         return jsonify({'message': 'Analysis completed', 'result': result}), 200
     except Exception as e:
