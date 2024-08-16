@@ -167,74 +167,154 @@ def get_yfinance_data(symbol, period="1mo"):
 
 def get_stock_data(symbol, period="1mo"):
     try:
+        normalized_symbol = normalize_asset(symbol)
+        logger.info(f"Fetching data for: {symbol} (normalized: {normalized_symbol})")
         
-        if '/' in symbol:  # This is a forex pair or commodity
-            logger.info(f"Fetching forex/commodity data for: {symbol}")
-            finnhub_data = get_finnhub_forex_data(symbol)
-            if finnhub_data is not None and not finnhub_data.empty:
-                return finnhub_data
-            else:
-                logger.warning(f"Fallback to yfinance for forex/commodity data: {symbol}")
-                fallback_symbol = symbol.replace('/', '-')
-                data = get_yfinance_data(fallback_symbol)
-                if data is not None and not data.empty:
-                    logger.error(f"No data available for {symbol}")
-                    price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                    data[price_columns] = data[price_columns].round(5)
-                    return data
-                else:
-                    raise ValueError(f"No data available for {symbol}")
+        if '/' in normalized_symbol:  # This is a forex pair or commodity
+            return get_forex_or_commodity_data(normalized_symbol, period)
         elif '-' in symbol:  # This is a crypto
-            logger.info(f"Fetching crypto data for: {symbol}")
-            # Try yfinance first
-            data = get_yfinance_data(symbol, period)
-            if data is not None and not data.empty and data['Close'].iloc[-1] != 0:
-                price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                data[price_columns] = data[price_columns].round(8)
-                return data
-            else:
-                logger.warning(f"Fallback to CoinGecko API for crypto data: {symbol}")
-                # Fallback to CoinGecko API
-                coin_id = symbol.split('-')[0].lower()
-                url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=30&interval=daily"
-                response = requests.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    df = pd.DataFrame(data['prices'], columns=['timestamp', 'Close'])
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    df.set_index('timestamp', inplace=True)
-                    df['Open'] = df['Close'].shift(1)
-                    df['High'] = df['Close']
-                    df['Low'] = df['Close']
-                    df['Volume'] = [price[1] for price in data['total_volumes']]
-                    df['current_price'] = df['Close'].iloc[-1]
-                    price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                    df[price_columns] = df[price_columns].round(8)
-                    return df
-                else:
-                    raise ValueError(f"No data available for {symbol}")
+            return get_crypto_data(symbol, period)
         else:  # This is a stock
-            logger.info(f"Fetching stock data for: {symbol}")
-            finnhub_data = get_finnhub_data(symbol)
-            if finnhub_data:
-                stock = yf.Ticker(symbol)
-                hist = stock.history(period=period)
-                hist['current_price'] = finnhub_data['c']
-                price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                hist[price_columns] = hist[price_columns].round(2)
-                return hist
-            else:
-                logger.warning(f"Fallback to yfinance for stock data: {symbol}")
-                data = get_yfinance_data(symbol)
-                if data is not None and not data.empty:
-                    price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
-                    data[price_columns] = data[price_columns].round(2)
-                    return data
-                else:
-                    raise ValueError(f"No data available for {symbol}")
+            return get_stock_specific_data(symbol, period)
     except Exception as e:
-        logger.error(f"Error fetching stock data: {e}")
+        logger.error(f"Error fetching data for {symbol}: {str(e)}")
         return None
+
+def get_forex_or_commodity_data(symbol, period):
+    try:
+        finnhub_data = get_finnhub_forex_data(symbol)
+        if finnhub_data is not None and not finnhub_data.empty:
+            logger.info(f"Successfully fetched Finnhub data for {symbol}")
+            return finnhub_data
+        
+        logger.warning(f"Fallback to yfinance for forex/commodity data: {symbol}")
+        fallback_symbol = symbol.replace('/', '-')
+        data = get_yfinance_data(fallback_symbol, period)
+        if data is not None and not data.empty:
+            price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+            data[price_columns] = data[price_columns].round(5)
+            return data
+        
+        raise ValueError(f"No data available for {symbol}")
+    except Exception as e:
+        logger.error(f"Error fetching forex/commodity data for {symbol}: {str(e)}")
+        return None
+
+def get_crypto_data(symbol, period):
+    try:
+        finnhub_data = get_finnhub_data(symbol)
+        if finnhub_data:
+            logger.info(f"Successfully fetched Finnhub data for crypto {symbol}")
+            hist = yf.Ticker(symbol).history(period=period)
+            hist['current_price'] = finnhub_data['c']
+            price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+            hist[price_columns] = hist[price_columns].round(8)
+            return hist
+    except Exception as e:
+        logger.warning(f"Failed to fetch Finnhub data for crypto {symbol}: {str(e)}")
+
+    logger.warning(f"Fallback to yfinance for crypto data: {symbol}")
+    data = get_yfinance_data(symbol, period)
+    if data is not None and not data.empty and data['Close'].iloc[-1] != 0:
+        price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+        data[price_columns] = data[price_columns].round(8)
+        return data
+    
+    logger.warning(f"Fallback to CoinGecko API for crypto data: {symbol}")
+    coin_id = symbol.split('-')[0].lower()
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days=30&interval=daily"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        df = pd.DataFrame(data['prices'], columns=['timestamp', 'Close'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        df['Open'] = df['Close'].shift(1)
+        df['High'] = df['Close']
+        df['Low'] = df['Close']
+        df['Volume'] = [price[1] for price in data['total_volumes']]
+        df['current_price'] = df['Close'].iloc[-1]
+        price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+        df[price_columns] = df[price_columns].round(8)
+        return df
+    else:
+        raise ValueError(f"No data available for {symbol}")
+
+def get_stock_specific_data(symbol, period):
+    finnhub_data = get_finnhub_data(symbol)
+    if finnhub_data:
+        logger.info(f"Successfully fetched Finnhub data for stock {symbol}")
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period=period)
+        hist['current_price'] = finnhub_data['c']
+        price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+        hist[price_columns] = hist[price_columns].round(2)
+        return hist
+    
+    logger.warning(f"Fallback to yfinance for stock data: {symbol}")
+    data = get_yfinance_data(symbol, period)
+    if data is not None and not data.empty:
+        price_columns = ['Open', 'High', 'Low', 'Close', 'current_price']
+        data[price_columns] = data[price_columns].round(2)
+        return data
+    
+    raise ValueError(f"No data available for {symbol}")
+
+
+
+def get_finnhub_forex_data(symbol, period="1mo"):
+    try:
+        # Convert period to number of days
+        days = {
+            "1d": 1, "1w": 7, "1mo": 30, "3mo": 90,
+            "6mo": 180, "1y": 365, "2y": 730, "5y": 1825
+        }.get(period, 30)  # Default to 30 days if period is not recognized
+
+        end_time = int(datetime.now().timestamp())
+        start_time = int((datetime.now() - timedelta(days=days)).timestamp())
+        
+        # Convert symbol to OANDA format if it's not already
+        if '/' not in symbol:
+            symbol = symbol.replace('-', '/')
+        oanda_symbol = f"OANDA:{symbol.replace('/', '_')}"
+        
+        base_url = "https://finnhub.io/api/v1/forex/candle"
+        params = {
+            "symbol": oanda_symbol,
+            "resolution": "D",
+            "from": start_time,
+            "to": end_time,
+            "token": FINNHUB_API_KEY
+        }
+        logger.info(f"Fetching Finnhub forex data for symbol: {oanda_symbol}")
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data['s'] == 'ok':
+            df = pd.DataFrame({
+                'Open': data['o'],
+                'High': data['h'],
+                'Low': data['l'],
+                'Close': data['c'],
+                'Volume': data['v']
+            }, index=pd.to_datetime(data['t'], unit='s'))
+            
+            # Round all price columns to 5 decimal places
+            price_columns = ['Open', 'High', 'Low', 'Close']
+            df[price_columns] = df[price_columns].round(5)
+            
+            df['current_price'] = df['Close'].iloc[-1]
+            return df
+        else:
+            logger.error(f"Error fetching Finnhub forex data: {data.get('error', 'Unknown error')}")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching Finnhub forex data for {symbol}: {str(e)}")
+        return None
+
+
+
 
 def get_news(symbol):
     try:
